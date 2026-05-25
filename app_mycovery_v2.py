@@ -224,23 +224,62 @@ def render_card(rank: int, row: pd.Series, total: float) -> None:
     cat_color = CAT_COLORS.get(cat, "#888")
     cat_label = CAT_LABELS.get(cat, cat)
 
-    # FQS mini bar
     fqs_keys = list(FQS_DIMS.keys())
     fqs_vals = [int(row.get(k, 0)) for k in fqs_keys]
     fqs_sum = sum(fqs_vals)
 
-    # Mini bar HTML (proportional segments)
+    # Valores reales para mostrar al evaluador
+    raw_vals = {
+        "fqs_sol":  str(row.get("Silicos_class", "?")),
+        "fqs_gi":   str(row.get("GI_abs", "?")),
+        "fqs_bbb":  "No (seguro)" if row.get("BBB") == "No" else "Yes (alerta)",
+        "fqs_pers": str(row.get("BioTr_label", "?")).replace("Estabilidad ", "").replace("Asimilación Nutricional Inmediata", "Rápida"),
+        "fqs_noec": "{:,.0f} mg/Kg".format(row.get("NOEC_num", 0)) if pd.notna(row.get("NOEC_num")) else "N/D",
+        "fqs_cin":  "{} productos".format(int(row.get("BioTr_count", 0))),
+    }
+
+    # Mini bar de color
     seg_html = ""
     for i, (k, v) in enumerate(zip(fqs_keys, fqs_vals)):
-        width_pct = (v / 60) * 100
+        pct = (v / 10) * 100
         color = FQS_COLORS[i]
         dim_label = FQS_DIMS[k]["label"]
+        raw = raw_vals[k]
         seg_html += (
-            f'<span class="fqs-seg" '
-            f'style="width:{width_pct:.1f}%;background:{color};'
-            f'display:inline-block;height:8px;border-radius:2px;margin-right:2px;" '
-            f'title="{dim_label}: {v}/10"></span>'
+            '<span style="display:inline-block;width:{}%;height:10px;'
+            'background:{};border-radius:3px;margin-right:3px;" '
+            'title="{}: {} → {}/10"></span>'.format(pct, color, dim_label, raw, v)
         )
+
+    # Tabla FQS detallada
+    fqs_rows = ""
+    explanations = {
+        "fqs_sol":  "Facilidad de disolver en agua para riego o spray foliar",
+        "fqs_gi":   "Capacidad de penetrar la cutícula de la hoja pasivamente",
+        "fqs_bbb":  "Sin riesgo neurotóxico para el operario que aplica",
+        "fqs_pers": "Tiempo que tarda el suelo en descomponer la molécula",
+        "fqs_noec": "Concentración máxima sin daño a lombrices de tierra",
+        "fqs_cin":  "N° de fragmentos generados por bacterias del suelo",
+    }
+    for i, k in enumerate(fqs_keys):
+        v = fqs_vals[i]
+        color = FQS_COLORS[i]
+        icon = FQS_DIMS[k]["icon"]
+        label = FQS_DIMS[k]["label"]
+        raw = raw_vals[k]
+        expl = explanations[k]
+        bar_w = v * 10
+        score_color = "#1D9E75" if v >= 8 else ("#BA7517" if v >= 5 else "#A32D2D")
+        fqs_rows += (
+            '<tr>'
+            '<td style="padding:3px 8px;font-size:0.78rem;white-space:nowrap">{} <strong>{}</strong></td>'
+            '<td style="padding:3px 8px;font-size:0.78rem;color:#555">{}</td>'
+            '<td style="padding:3px 8px;font-size:0.78rem;color:#333">{}</td>'
+            '<td style="padding:3px 8px;text-align:right">'
+            '<span style="background:{};color:white;padding:1px 7px;border-radius:10px;font-size:0.75rem;font-weight:700">{}/10</span>'
+            '</td>'
+            '</tr>'
+        ).format(icon, label, expl, raw, score_color, v)
 
     # Badges
     bbb_badge = (
@@ -253,33 +292,43 @@ def render_card(rank: int, row: pd.Series, total: float) -> None:
         if row.get("Mutagenicity") == "Mutagenic" else
         '<span class="badge ok-badge">✅ No mutagénico</span>'
     )
-    strain_badge = f'<span class="badge" style="background:#0C2518;color:#9FE1CB">{row.get("Strain","?")}</span>'
-    cat_badge = f'<span class="badge" style="background:{cat_color};color:white">{cat_label}</span>'
+    strain_badge = '<span class="badge" style="background:#0C2518;color:#9FE1CB">{}</span>'.format(row.get("Strain", "?"))
+    cat_badge = '<span class="badge" style="background:{};color:white">{}</span>'.format(cat_color, cat_label)
 
-    # Score bar
     score_pct = int(total)
     bar_filled = "█" * (score_pct // 10)
     bar_empty  = "░" * (10 - score_pct // 10)
-    fqs_display = f"{fqs_sum}/60"
 
-    st.markdown(f"""
-    <div class="score-card">
-      <h4>{rank}. {row['Compound']}</h4>
-      <p style="margin-bottom:5px">{cat_badge} {strain_badge} {bbb_badge} {mut_badge}</p>
-      <p>
-        <strong>Score combinado:</strong> {bar_filled}{bar_empty} {score_pct}% &nbsp;|&nbsp;
-        <strong>FQS:</strong> {fqs_display} &nbsp;|&nbsp;
-        <strong>MW:</strong> {row.get('MW','?')} Da &nbsp;|&nbsp;
-        <strong>LogP:</strong> {row.get('LogP','?')} &nbsp;|&nbsp;
-        <strong>GI:</strong> {row.get('GI_abs','?')}
-      </p>
-      <p style="margin-top:4px"><strong>Perfil FQS (6 criterios):</strong></p>
-      <div class="fqs-bar-wrap">{seg_html}</div>
-      <p style="font-size:0.75rem;color:#666">
-        {'  ·  '.join([f"{FQS_DIMS[k]['icon']} {FQS_DIMS[k]['label']}: {int(row.get(k,0))}/10" for k in fqs_keys])}
-      </p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        '<div class="score-card">'
+        '<h4>{rank}. {compound}</h4>'
+        '<p style="margin-bottom:6px">{cat} {strain} {bbb} {mut}</p>'
+        '<p style="margin-bottom:8px">'
+        '<strong>Score combinado:</strong> {bar} {pct}%'
+        ' &nbsp;|&nbsp; <strong>FQS total:</strong> {fqs}/60'
+        ' &nbsp;|&nbsp; <strong>MW:</strong> {mw} Da'
+        ' &nbsp;|&nbsp; <strong>LogP:</strong> {logp}'
+        '</p>'
+        '<p style="margin:4px 0 3px 0;font-size:0.8rem"><strong>Perfil FQS — Aptitud de formulación (6 criterios):</strong></p>'
+        '<div style="margin-bottom:6px">{segs}</div>'
+        '<table style="width:100%;border-collapse:collapse;margin-top:4px">'
+        '<thead><tr>'
+        '<th style="text-align:left;font-size:0.72rem;color:#888;padding:2px 8px">Criterio</th>'
+        '<th style="text-align:left;font-size:0.72rem;color:#888;padding:2px 8px">Significado agronómico</th>'
+        '<th style="text-align:left;font-size:0.72rem;color:#888;padding:2px 8px">Valor medido</th>'
+        '<th style="text-align:right;font-size:0.72rem;color:#888;padding:2px 8px">Score</th>'
+        '</tr></thead>'
+        '<tbody>{rows}</tbody>'
+        '</table>'
+        '</div>'.format(
+            rank=rank, compound=row["Compound"],
+            cat=cat_badge, strain=strain_badge, bbb=bbb_badge, mut=mut_badge,
+            bar=bar_filled + bar_empty, pct=score_pct,
+            fqs=fqs_sum, mw=row.get("MW", "?"), logp=row.get("LogP", "?"),
+            segs=seg_html, rows=fqs_rows,
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 # ── HEADER ──────────────────────────────────────────────────────────────
@@ -550,74 +599,4 @@ for bar, v in zip(bars3, vals_all):
         ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.05,
                  str(v), ha="center", va="bottom", fontsize=9, fontweight="bold")
 plt.xticks(rotation=30, ha="right", fontsize=8)
-plt.tight_layout()
-st.pyplot(fig3)
-
-st.markdown("---")
-
-# ── TABLA EXPORTABLE ─────────────────────────────────────────────────────
-
-st.markdown('<p class="section-title">Tabla para laboratorio / formulación</p>',
-            unsafe_allow_html=True)
-
-export_cols = {
-    "ID": "ID",
-    "Strain": "Cepa",
-    "Compound": "Metabolito",
-    "cat": "Categoría",
-    "score_total": "Score (%)",
-    "FQS": "FQS (0-60)",
-    "fqs_sol": "Solubilidad",
-    "fqs_gi": "Absorción Foliar",
-    "fqs_bbb": "Seguridad Op.",
-    "fqs_pers": "Persistencia",
-    "fqs_noec": "Seg. Lombrices",
-    "fqs_cin": "Estab. Micro.",
-    "MW": "MW (Da)",
-    "LogP": "LogP",
-    "GI_abs": "GI Abs.",
-    "BBB": "BBB",
-    "Mutagenicity": "Mutagenicidad",
-    "NOEC_num": "NOEC (mg/Kg)",
-}
-
-export = results[[c for c in export_cols if c in results.columns]].copy()
-export = export.rename(columns={c: export_cols[c] for c in export_cols if c in export.columns})
-export["Categoría"] = export["Categoría"].map(CAT_LABELS)
-export["Score (%)"] = export["Score (%)"].apply(lambda x: f"{x:.1f}")
-export["FQS (0-60)"] = export["FQS (0-60)"].apply(lambda x: f"{int(x)}")
-
-st.dataframe(export, use_container_width=True, hide_index=True)
-
-csv_bytes = export.to_csv(index=False).encode("utf-8")
-fname = f"mycovery_{cultivo}_{'_'.join(s[:5].replace('/','') for s in stressors)}.csv"
-st.download_button(
-    "⬇️ Descargar tabla CSV",
-    csv_bytes,
-    fname,
-    "text/csv",
-    use_container_width=True,
-)
-
-st.markdown("---")
-st.markdown(
-    "_Mycovery v2.0 · Fungal metabolomics for next-gen bioinputs · "
-    "803 metabolitos · Atacama Desert · Chile · 2026_"
-)
-
-
-st.markdown(
-    '<div style="background:#0C2518;border-radius:10px;padding:18px 24px;margin-top:16px;text-align:center">'
-    '<p style="color:#9FE1CB;font-size:0.82rem;margin:0 0 6px 0">'
-    '&#169; 2026 <strong style="color:#1D9E75">Mycovery</strong> &middot; Todos los derechos reservados</p>'
-    '<p style="color:#6db89a;font-size:0.75rem;margin:0 0 4px 0">'
-    'La base de datos de metabolitos f&#250;ngicos, el algoritmo de puntuaci&#243;n'
-    ' multidimensional (FQS + SRS) y la metodolog&#237;a de recomendaci&#243;n de mezclas'
-    ' son propiedad intelectual exclusiva de Mycovery.</p>'
-    '<p style="color:#6db89a;font-size:0.75rem;margin:0">'
-    'Queda prohibida la reproducci&#243;n, distribuci&#243;n o uso comercial'
-    ' sin autorizaci&#243;n expresa y por escrito.'
-    ' &middot; Atacama Desert &middot; Chile'
-    ' &middot; <em>Nature encoded it. We decoded it.</em></p></div>',
-    unsafe_allow_html=True
-)
+plt.tight_layout
