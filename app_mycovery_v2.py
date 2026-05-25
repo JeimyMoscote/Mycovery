@@ -252,31 +252,22 @@ def render_card(rank: int, row: pd.Series, total: float) -> None:
         )
     seg_html += '</div>'
 
-    # Tabla FQS detallada
-    fqs_rows = ""
-    explanations = {
-        "fqs_sol":  "Facilidad de disolver en agua para riego o spray foliar",
-        "fqs_gi":   "Capacidad de penetrar la cutícula de la hoja pasivamente",
-        "fqs_bbb":  "Sin riesgo neurotóxico para el operario que aplica",
-        "fqs_pers": "Tiempo que tarda el suelo en descomponer la molécula",
-        "fqs_noec": "Concentración máxima sin daño a lombrices de tierra",
-        "fqs_cin":  "N° de fragmentos generados por bacterias del suelo",
-    }
+    # Texto compacto de criterios FQS debajo de la barra
+    fqs_inline = ""
     for i, k in enumerate(fqs_keys):
         v = fqs_vals[i]
         icon = FQS_DIMS[k]["icon"]
         label = FQS_DIMS[k]["label"]
         raw = raw_vals[k]
+        color = FQS_COLORS[i]
         score_color = "#1D9E75" if v >= 8 else ("#BA7517" if v >= 5 else "#A32D2D")
-        fqs_rows += (
-            '<tr>'
-            '<td style="padding:4px 10px;font-size:0.78rem;white-space:nowrap">{} <strong>{}</strong></td>'
-            '<td style="padding:4px 10px;font-size:0.78rem;color:#333">{}</td>'
-            '<td style="padding:4px 10px;text-align:right">'
-            '<span style="background:{};color:white;padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:700">{}/10</span>'
-            '</td>'
-            '</tr>'
-        ).format(icon, label, raw, score_color, v)
+        fqs_inline += (
+            '<span style="margin-right:14px;font-size:0.78rem;white-space:nowrap">'
+            '{icon} <strong style="color:{col}">{label}</strong>: '
+            '{raw} <span style="background:{sc};color:white;padding:1px 6px;'
+            'border-radius:8px;font-size:0.72rem;font-weight:700">{v}/10</span>'
+            '</span>'
+        ).format(icon=icon, col=color, label=label, raw=raw, sc=score_color, v=v)
 
     # Badges
     bbb_badge = (
@@ -306,22 +297,15 @@ def render_card(rank: int, row: pd.Series, total: float) -> None:
         ' &nbsp;|&nbsp; <strong>MW:</strong> {mw} Da'
         ' &nbsp;|&nbsp; <strong>LogP:</strong> {logp}'
         '</p>'
-        '<p style="margin:4px 0 3px 0;font-size:0.8rem"><strong>Perfil FQS — Aptitud de formulación (6 criterios):</strong></p>'
-        '<div style="margin-bottom:6px">{segs}</div>'
-        '<table style="width:100%;border-collapse:collapse;margin-top:4px">'
-        '<thead><tr style="border-bottom:1px solid #eee">'
-        '<th style="text-align:left;font-size:0.72rem;color:#888;padding:2px 10px">Criterio FQS</th>'
-        '<th style="text-align:left;font-size:0.72rem;color:#888;padding:2px 10px">Valor medido</th>'
-        '<th style="text-align:right;font-size:0.72rem;color:#888;padding:2px 10px">Score</th>'
-        '</tr></thead>'
-        '<tbody>{rows}</tbody>'
-        '</table>'
+        '<p style="margin:6px 0 2px 0;font-size:0.78rem;color:#666"><strong>FQS — Aptitud de formulación:</strong></p>'
+        '<div style="margin-bottom:4px">{segs}</div>'
+        '<div style="line-height:2;padding:2px 0">{inline}</div>'
         '</div>'.format(
             rank=rank, compound=row["Compound"],
             cat=cat_badge, strain=strain_badge, bbb=bbb_badge, mut=mut_badge,
             bar=bar_filled + bar_empty, pct=score_pct,
             fqs=fqs_sum, mw=row.get("MW", "?"), logp=row.get("LogP", "?"),
-            segs=seg_html, rows=fqs_rows,
+            segs=seg_html, inline=fqs_inline,
         ),
         unsafe_allow_html=True,
     )
@@ -378,6 +362,16 @@ with st.sidebar:
     w_fqs = st.slider("Peso FQS (formulación)", 0.1, 0.9, 0.55, 0.05)
     w_srs = round(1.0 - w_fqs, 2)
     st.caption(f"Peso SRS (relevancia estresor): {w_srs}")
+
+    st.markdown("**¿Qué evalúa el FQS?**")
+    st.markdown(
+        "💧 **Solubilidad** — Se disuelve en agua para riego o spray foliar\n\n"
+        "🌿 **Absorción foliar** — Penetra la cutícula de la hoja (GI absorption High)\n\n"
+        "🛡️ **Seguridad operario** — No cruza la barrera hematoencefálica (BBB−)\n\n"
+        "⏱️ **Persistencia campo** — Semanas activo antes de degradarse (BioTransformer)\n\n"
+        "🪱 **Seguridad lombrices** — NOEC alto = sin daño a macrofauna del suelo\n\n"
+        "🦠 **Estabilidad microbiana** — Las bacterias del suelo no lo fragmentan rápido"
+    )
 
     st.markdown("---")
     st.markdown("**Filtros de formulación**")
