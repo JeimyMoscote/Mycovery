@@ -4,59 +4,59 @@ Mycovery · Metabolite Recommender v2.0
 Carga: mycovery_803_clean.csv  (803 metabolitos con análisis completo)
 Scoring: 6 criterios FQS (formulación) + relevancia por estresor (SRS)
 """
- 
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import os
- 
+
 # ── CONFIG ──────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Mycovery · Metabolite Recommender v2",
     page_icon="🍄",
     layout="wide",
 )
- 
+
 # ── ESTILOS ─────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
   .main { background-color: #f5f4f0; }
   .stApp { font-family: 'Helvetica Neue', Arial, sans-serif; }
- 
+
   .title-block { background: #0C2518; border-radius: 12px; padding: 22px 32px; margin-bottom: 20px; }
   .title-main  { color: #1D9E75; font-size: 2.1rem; font-weight: 800; margin: 0; }
   .title-sub   { color: #9FE1CB; font-size: 0.9rem; margin: 4px 0 0 0; }
   .tagline     { color: #EF9F27; font-size: 0.82rem; font-style: italic; margin-top: 6px; }
- 
+
   .score-card  { background: white; border-radius: 10px; padding: 14px 18px;
                  border-left: 4px solid #1D9E75; margin-bottom: 10px;
                  box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
   .score-card h4 { margin: 0 0 4px 0; color: #0C2518; font-size: 1rem; }
   .score-card p  { margin: 2px 0; color: #444; font-size: 0.82rem; line-height: 1.5; }
- 
+
   .fqs-bar-wrap { display: flex; gap: 3px; margin: 6px 0 4px 0; align-items: center; }
   .fqs-seg { height: 8px; border-radius: 3px; }
- 
+
   .badge { display:inline-block; padding:2px 9px; border-radius:12px;
            font-size:0.72rem; font-weight:600; margin-right:3px; }
   .alert-badge { background:#A32D2D; color:white; }
   .ok-badge    { background:#1D9E75; color:white; }
- 
+
   .section-title { color:#0C2518; font-size:1.05rem; font-weight:700;
                    margin:20px 0 10px 0; border-bottom:2px solid #1D9E75; padding-bottom:4px; }
- 
+
   .legend-dot { display:inline-block; width:10px; height:10px; border-radius:50%;
                 margin-right:4px; vertical-align:middle; }
- 
+
   .info-box { background:#e8f5ef; border-radius:8px; padding:10px 16px;
               border-left:3px solid #1D9E75; margin-bottom:12px; font-size:0.85rem; }
 </style>
 """, unsafe_allow_html=True)
- 
+
 # ── CONSTANTES ──────────────────────────────────────────────────────────
- 
+
 CAT_LABELS = {
     "FIT": "Fitohormonas",
     "COF": "Cofactores / Vitaminas",
@@ -69,13 +69,13 @@ CAT_LABELS = {
     "OTHER": "Sin clasificar",
     "RD": "Línea I+D",
 }
- 
+
 CAT_COLORS = {
     "FIT": "#1D9E75", "COF": "#534AB7", "OSM": "#0C447C", "AOX": "#BA7517",
     "DEF": "#A32D2D", "SOL": "#5DCAA5", "AMI": "#854F0B", "POL": "#3B8B6A",
     "OTHER": "#888888", "RD": "#AAAAAA",
 }
- 
+
 FQS_DIMS = {
     "fqs_sol":  {"label": "Solubilidad",          "icon": "💧", "max": 10,
                  "tooltip": "Silicos-IT class → facilidad de formulación líquida"},
@@ -90,7 +90,7 @@ FQS_DIMS = {
     "fqs_cin":  {"label": "Estabilidad microbiana","icon": "🦠", "max": 10,
                  "tooltip": "Productos BioTransformer → integridad en suelo"},
 }
- 
+
 STRESSOR_MAP = {
     "Sequía / Déficit hídrico": {
         "cats": ["OSM", "FIT", "AOX", "COF"],
@@ -141,30 +141,26 @@ STRESSOR_MAP = {
         "emoji": "📦",
     },
 }
- 
+
 # ── CARGA DE DATOS ───────────────────────────────────────────────────────
- 
+
+CSV_FILENAME = "mycovery_803_clean.csv"
+
 @st.cache_data
-def load_data(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path, sep=";")
-    return df
- 
- 
-def find_csv() -> str | None:
+def load_data() -> pd.DataFrame:
+    # 1. Intenta cargarlo desde la misma carpeta del repo (Streamlit Cloud lo tiene junto al .py)
     here = os.path.dirname(os.path.abspath(__file__))
-    candidates = [
-        os.path.join(here, "mycovery_803_clean.csv"),
-        os.path.join(here, "..", "mycovery_803_clean.csv"),
-        "mycovery_803_clean.csv",
-    ]
-    for p in candidates:
-        if os.path.isfile(p):
-            return p
+    local_path = os.path.join(here, CSV_FILENAME)
+    if os.path.isfile(local_path):
+        return pd.read_csv(local_path, sep=";")
+    # 2. Fallback: archivo en el directorio de trabajo
+    if os.path.isfile(CSV_FILENAME):
+        return pd.read_csv(CSV_FILENAME, sep=";")
     return None
- 
- 
+
+
 # ── SCORING ─────────────────────────────────────────────────────────────
- 
+
 def compute_srs(df: pd.DataFrame, stressors: list[str]) -> pd.Series:
     """Stressor Relevance Score, normalizado a 0-40."""
     scores = pd.Series(0.0, index=df.index)
@@ -175,8 +171,8 @@ def compute_srs(df: pd.DataFrame, stressors: list[str]) -> pd.Series:
     if max_poss > 0:
         scores = (scores / max_poss * 40).clip(0, 40)
     return scores
- 
- 
+
+
 def combined_score(df: pd.DataFrame, stressors: list[str],
                    w_fqs: float = 0.55, w_srs: float = 0.45) -> pd.Series:
     fqs_pct = df["FQS"] / 60.0 * 100
@@ -186,8 +182,8 @@ def combined_score(df: pd.DataFrame, stressors: list[str],
         return w_fqs * fqs_pct + w_srs * srs_pct
     else:
         return fqs_pct
- 
- 
+
+
 def select_diverse_top(df: pd.DataFrame, top_n: int,
                        include_unclassified: bool = False) -> pd.DataFrame:
     """Selecciona top_n maximizando diversidad de categorías funcionales."""
@@ -197,11 +193,11 @@ def select_diverse_top(df: pd.DataFrame, top_n: int,
         unclassified = pool[pool["cat"].isin(["OTHER", "RD"])]
         # Fill remainder with unclassified if needed
         pool = pd.concat([classified, unclassified])
- 
+
     selected = []
     used_cats = {}
     MAX_PER_CAT = max(2, top_n // 4)
- 
+
     for _, row in pool.iterrows():
         if len(selected) >= top_n:
             break
@@ -211,25 +207,25 @@ def select_diverse_top(df: pd.DataFrame, top_n: int,
                 continue
             used_cats[c] = used_cats.get(c, 0) + 1
         selected.append(row)
- 
+
     return pd.DataFrame(selected).reset_index(drop=True)
- 
- 
+
+
 # ── RENDER DE CARD ───────────────────────────────────────────────────────
- 
+
 FQS_COLORS = ["#1D9E75", "#0C447C", "#534AB7", "#BA7517", "#5DCAA5", "#A32D2D"]
- 
- 
+
+
 def render_card(rank: int, row: pd.Series, total: float) -> None:
     cat = row["cat"]
     cat_color = CAT_COLORS.get(cat, "#888")
     cat_label = CAT_LABELS.get(cat, cat)
- 
+
     # FQS mini bar
     fqs_keys = list(FQS_DIMS.keys())
     fqs_vals = [int(row.get(k, 0)) for k in fqs_keys]
     fqs_sum = sum(fqs_vals)
- 
+
     # Mini bar HTML (proportional segments)
     seg_html = ""
     for i, (k, v) in enumerate(zip(fqs_keys, fqs_vals)):
@@ -242,7 +238,7 @@ def render_card(rank: int, row: pd.Series, total: float) -> None:
             f'display:inline-block;height:8px;border-radius:2px;margin-right:2px;" '
             f'title="{dim_label}: {v}/10"></span>'
         )
- 
+
     # Badges
     bbb_badge = (
         '<span class="badge alert-badge">⚠️ BBB+</span>'
@@ -256,13 +252,13 @@ def render_card(rank: int, row: pd.Series, total: float) -> None:
     )
     strain_badge = f'<span class="badge" style="background:#0C2518;color:#9FE1CB">{row.get("Strain","?")}</span>'
     cat_badge = f'<span class="badge" style="background:{cat_color};color:white">{cat_label}</span>'
- 
+
     # Score bar
     score_pct = int(total)
     bar_filled = "█" * (score_pct // 10)
     bar_empty  = "░" * (10 - score_pct // 10)
     fqs_display = f"{fqs_sum}/60"
- 
+
     st.markdown(f"""
     <div class="score-card">
       <h4>{rank}. {row['Compound']}</h4>
@@ -281,10 +277,10 @@ def render_card(rank: int, row: pd.Series, total: float) -> None:
       </p>
     </div>
     """, unsafe_allow_html=True)
- 
- 
+
+
 # ── HEADER ──────────────────────────────────────────────────────────────
- 
+
 st.markdown("""
 <div class="title-block">
   <p class="title-main">🍄 Mycovery</p>
@@ -292,65 +288,63 @@ st.markdown("""
   <p class="tagline">Nature encoded it. We decoded it.</p>
 </div>
 """, unsafe_allow_html=True)
- 
+
 # ── CARGA CSV ────────────────────────────────────────────────────────────
- 
-csv_path = find_csv()
-if csv_path:
-    df_full = load_data(csv_path)
+
+df_full = load_data()
+if df_full is not None:
     st.success(f"✅ Base de datos cargada · **{len(df_full)} metabolitos** con análisis completo")
 else:
-    st.warning("⚠️ No se encontró `mycovery_803_clean.csv`. Sube el archivo manualmente:")
-    uploaded = st.file_uploader("Subir mycovery_803_clean.csv", type=["csv"])
-    if uploaded is None:
-        st.stop()
-    df_full = pd.read_csv(uploaded, sep=";")
-    st.success(f"✅ Cargado · {len(df_full)} metabolitos")
- 
+    st.error(
+        "❌ No se encontró `mycovery_803_clean.csv`. "
+        "Asegurate de que el archivo esté en la misma carpeta que `app_mycovery_v2.py` en tu repositorio de GitHub."
+    )
+    st.stop()
+
 # ── SIDEBAR ──────────────────────────────────────────────────────────────
- 
+
 with st.sidebar:
     st.markdown("### ⚙️ Configura tu recomendación")
- 
+
     cultivo = st.selectbox("🌿 Cultivo objetivo", [
         "Tomate", "Vid", "Trigo", "Maíz", "Arándano", "Lechuga",
         "Papa", "Cebolla", "Pimiento", "Olivo", "Aguacate", "Otro",
     ])
- 
+
     stressors = st.multiselect(
         "⚡ Estresores (uno o más)",
         list(STRESSOR_MAP.keys()),
         default=["Sequía / Déficit hídrico"],
     )
- 
+
     top_n = st.slider("Nº de metabolitos a recomendar", 3, 15, 8)
- 
+
     include_unclassified = st.checkbox(
         "Incluir metabolitos sin clasificar (I+D)", value=False,
         help="Los 624 metabolitos sin categoría funcional aún. "
              "Útil para exploración de candidatos nuevos."
     )
- 
+
     st.markdown("---")
     st.markdown("**Pesos del score combinado**")
     w_fqs = st.slider("Peso FQS (formulación)", 0.1, 0.9, 0.55, 0.05)
     w_srs = round(1.0 - w_fqs, 2)
     st.caption(f"Peso SRS (relevancia estresor): {w_srs}")
- 
+
     st.markdown("---")
     st.markdown("**Filtros de formulación**")
     max_mw = st.slider("MW máximo (Da)", 100, 700, 500)
     logp_range = st.slider("Rango LogP", -5.0, 5.0, (-4.0, 3.0))
     min_fqs = st.slider("FQS mínimo (0-60)", 0, 60, 45)
- 
+
     only_nonmuta = st.checkbox("Solo no mutagénicos (Ames test)", value=True)
     only_safe_bbb = st.checkbox("Solo seguros para operario (BBB−)", value=False)
- 
+
     st.markdown("---")
     run = st.button("🔍 Recomendar mezcla", use_container_width=True, type="primary")
- 
+
 # ── LÓGICA PRINCIPAL ─────────────────────────────────────────────────────
- 
+
 if not run and "results_df" not in st.session_state:
     st.info("👈 Configura los parámetros en el panel izquierdo y pulsa **Recomendar mezcla**.")
     # Muestra estadísticas de la BD
@@ -392,44 +386,44 @@ if not run and "results_df" not in st.session_state:
         plt.tight_layout()
         st.pyplot(fig3)
     st.stop()
- 
+
 # ── APPLY FILTERS & SCORE ────────────────────────────────────────────────
- 
+
 df = df_full.copy()
- 
+
 # Filtros booleanos
 if only_nonmuta:
     df = df[df["Mutagenicity"] == "NON-Mutagenic"]
 if only_safe_bbb:
     df = df[df["BBB"] == "No"]
- 
+
 # Filtros numéricos
 df = df[
     (df["MW"].fillna(9999) <= max_mw) &
     (df["LogP"].fillna(99).between(logp_range[0], logp_range[1])) &
     (df["FQS"].fillna(0) >= min_fqs)
 ]
- 
+
 if len(df) == 0:
     st.error("❌ Ningún metabolito pasa los filtros actuales. Relaja los criterios.")
     st.stop()
- 
+
 # Score combinado
 df["score_total"] = combined_score(df, stressors, w_fqs=w_fqs, w_srs=w_srs)
 df = df.sort_values("score_total", ascending=False)
- 
+
 # Selección diversa
 results = select_diverse_top(df, top_n, include_unclassified=include_unclassified)
- 
+
 if len(results) == 0:
     st.warning("No se encontraron metabolitos clasificados para los estresores seleccionados. "
                "Activa 'Incluir metabolitos sin clasificar' para ver candidatos I+D.")
     st.stop()
- 
+
 st.session_state["results_df"] = results
- 
+
 # ── MÉTRICAS RESUMEN ─────────────────────────────────────────────────────
- 
+
 m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric("Cultivo", cultivo)
 m2.metric("Estresores", len(stressors) if stressors else "— (solo FQS)")
@@ -437,11 +431,11 @@ m3.metric("Candidatos en pool", f"{len(df):,}")
 m4.metric("Metabolitos recomendados", len(results))
 cat_set = set(results["cat"]) - {"OTHER", "RD"}
 m5.metric("Categorías cubiertas", f"{len(cat_set)}/8")
- 
+
 st.markdown("---")
- 
+
 # ── ESTRESORES SELECCIONADOS ──────────────────────────────────────────────
- 
+
 if stressors:
     st.markdown('<p class="section-title">Estresores y categorías requeridas</p>',
                 unsafe_allow_html=True)
@@ -460,14 +454,14 @@ if stressors:
                 f'{cats_str}<br><span style="color:#555">{info["desc"]}</span></div>',
                 unsafe_allow_html=True
             )
- 
+
 st.markdown("---")
- 
+
 # ── MEZCLA RECOMENDADA ───────────────────────────────────────────────────
- 
+
 st.markdown(f'<p class="section-title">Mezcla recomendada para {cultivo}</p>',
             unsafe_allow_html=True)
- 
+
 # Leyenda FQS
 legend_html = "".join(
     f'<span style="display:inline-flex;align-items:center;margin-right:12px;font-size:0.78rem">'
@@ -479,16 +473,16 @@ st.markdown(
     f'<div style="margin-bottom:10px;font-size:0.82rem"><strong>Leyenda FQS:</strong> {legend_html}</div>',
     unsafe_allow_html=True
 )
- 
+
 for rank, (_, row) in enumerate(results.iterrows(), 1):
     render_card(rank, row, row["score_total"])
- 
+
 st.markdown("---")
- 
+
 # ── GRÁFICOS ──────────────────────────────────────────────────────────────
- 
+
 col_a, col_b = st.columns(2)
- 
+
 with col_a:
     st.markdown('<p class="section-title">Score combinado por metabolito</p>',
                 unsafe_allow_html=True)
@@ -512,7 +506,7 @@ with col_a:
     ax.legend(handles=patches, fontsize=7, loc="lower right")
     plt.tight_layout()
     st.pyplot(fig)
- 
+
 with col_b:
     st.markdown('<p class="section-title">Perfil FQS promedio de la mezcla</p>',
                 unsafe_allow_html=True)
@@ -534,7 +528,7 @@ with col_b:
                  f"{val:.1f}", va="center", fontsize=8)
     plt.tight_layout()
     st.pyplot(fig2)
- 
+
 # Cobertura de categorías
 st.markdown('<p class="section-title">Cobertura de categorías funcionales en la mezcla</p>',
             unsafe_allow_html=True)
@@ -555,14 +549,14 @@ for bar, v in zip(bars3, vals_all):
 plt.xticks(rotation=30, ha="right", fontsize=8)
 plt.tight_layout()
 st.pyplot(fig3)
- 
+
 st.markdown("---")
- 
+
 # ── TABLA EXPORTABLE ─────────────────────────────────────────────────────
- 
+
 st.markdown('<p class="section-title">Tabla para laboratorio / formulación</p>',
             unsafe_allow_html=True)
- 
+
 export_cols = {
     "ID": "ID",
     "Strain": "Cepa",
@@ -583,15 +577,15 @@ export_cols = {
     "Mutagenicity": "Mutagenicidad",
     "NOEC_num": "NOEC (mg/Kg)",
 }
- 
+
 export = results[[c for c in export_cols if c in results.columns]].copy()
 export = export.rename(columns={c: export_cols[c] for c in export_cols if c in export.columns})
 export["Categoría"] = export["Categoría"].map(CAT_LABELS)
 export["Score (%)"] = export["Score (%)"].apply(lambda x: f"{x:.1f}")
 export["FQS (0-60)"] = export["FQS (0-60)"].apply(lambda x: f"{int(x)}")
- 
+
 st.dataframe(export, use_container_width=True, hide_index=True)
- 
+
 csv_bytes = export.to_csv(index=False).encode("utf-8")
 fname = f"mycovery_{cultivo}_{'_'.join(s[:5].replace('/','') for s in stressors)}.csv"
 st.download_button(
@@ -601,27 +595,26 @@ st.download_button(
     "text/csv",
     use_container_width=True,
 )
- 
+
 st.markdown("---")
 st.markdown(
     "_Mycovery v2.0 · Fungal metabolomics for next-gen bioinputs · "
     "803 metabolitos · Atacama Desert · Chile · 2026_"
 )
 
- 
-st.markdown("""
-<div style="background:#0C2518;border-radius:10px;padding:18px 24px;margin-top:16px;text-align:center">
-  <p style="color:#9FE1CB;font-size:0.82rem;margin:0 0 6px 0">
-    © 2026 <strong style="color:#1D9E75">Mycovery</strong> · Todos los derechos reservados
-  </p>
-  <p style="color:#6db89a;font-size:0.75rem;margin:0 0 4px 0">
-    La base de datos de metabolitos fúngicos, el algoritmo de puntuación multidimensional (FQS + SRS)
-    y la metodología de recomendación de mezclas son propiedad intelectual exclusiva de Mycovery.
-  </p>
-  <p style="color:#6db89a;font-size:0.75rem;margin:0">
-    Queda prohibida la reproducción, distribución o uso comercial de esta tecnología
-    sin autorización expresa y por escrito. · Atacama Desert · Chile ·
-    <em>Nature encoded it. We decoded it.</em>
-  </p>
-</div>
-""", unsafe_allow_html=True)
+
+st.markdown(
+    '<div style="background:#0C2518;border-radius:10px;padding:18px 24px;margin-top:16px;text-align:center">'
+    '<p style="color:#9FE1CB;font-size:0.82rem;margin:0 0 6px 0">'
+    '&#169; 2026 <strong style="color:#1D9E75">Mycovery</strong> &middot; Todos los derechos reservados</p>'
+    '<p style="color:#6db89a;font-size:0.75rem;margin:0 0 4px 0">'
+    'La base de datos de metabolitos f&#250;ngicos, el algoritmo de puntuaci&#243;n'
+    ' multidimensional (FQS + SRS) y la metodolog&#237;a de recomendaci&#243;n de mezclas'
+    ' son propiedad intelectual exclusiva de Mycovery.</p>'
+    '<p style="color:#6db89a;font-size:0.75rem;margin:0">'
+    'Queda prohibida la reproducci&#243;n, distribuci&#243;n o uso comercial'
+    ' sin autorizaci&#243;n expresa y por escrito.'
+    ' &middot; Atacama Desert &middot; Chile'
+    ' &middot; <em>Nature encoded it. We decoded it.</em></p></div>',
+    unsafe_allow_html=True
+)
