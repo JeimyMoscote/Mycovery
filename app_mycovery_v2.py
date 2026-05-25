@@ -238,18 +238,19 @@ def render_card(rank: int, row: pd.Series, total: float) -> None:
         "fqs_cin":  "{} productos".format(int(row.get("BioTr_count", 0))),
     }
 
-    # Mini bar de color
-    seg_html = ""
+    # Barra horizontal apilada — flex:v hace cada segmento proporcional a su score
+    seg_html = '<div style="display:flex;width:100%;height:12px;border-radius:6px;overflow:hidden;gap:2px;margin:6px 0">'
     for i, (k, v) in enumerate(zip(fqs_keys, fqs_vals)):
-        pct = (v / 10) * 100
         color = FQS_COLORS[i]
         dim_label = FQS_DIMS[k]["label"]
         raw = raw_vals[k]
+        flex_val = max(v, 1)  # mínimo 1 para que se vea aunque v=0
+        opacity = "1" if v > 0 else "0.15"
         seg_html += (
-            '<span style="display:inline-block;width:{}%;height:10px;'
-            'background:{};border-radius:3px;margin-right:3px;" '
-            'title="{}: {} → {}/10"></span>'.format(pct, color, dim_label, raw, v)
+            '<div style="flex:{};background:{};opacity:{};height:100%;" '
+            'title="{}: {} → {}/10"></div>'.format(flex_val, color, opacity, dim_label, raw, v)
         )
+    seg_html += '</div>'
 
     # Tabla FQS detallada
     fqs_rows = ""
@@ -599,4 +600,77 @@ for bar, v in zip(bars3, vals_all):
         ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.05,
                  str(v), ha="center", va="bottom", fontsize=9, fontweight="bold")
 plt.xticks(rotation=30, ha="right", fontsize=8)
-plt.tight_layout
+plt.tight_layout()
+st.pyplot(fig3)
+
+st.markdown("---")
+
+# ── TABLA EXPORTABLE ─────────────────────────────────────────────────────
+
+st.markdown('<p class="section-title">Tabla para laboratorio / formulacion</p>',
+            unsafe_allow_html=True)
+
+export_cols = {
+    "ID": "ID",
+    "Strain": "Cepa",
+    "Compound": "Metabolito",
+    "cat": "Categoria",
+    "score_total": "Score (%)",
+    "FQS": "FQS (0-60)",
+    "fqs_sol": "Solubilidad",
+    "fqs_gi": "Absorcion Foliar",
+    "fqs_bbb": "Seguridad Op.",
+    "fqs_pers": "Persistencia",
+    "fqs_noec": "Seg. Lombrices",
+    "fqs_cin": "Estab. Micro.",
+    "MW": "MW (Da)",
+    "LogP": "LogP",
+    "GI_abs": "GI Abs.",
+    "BBB": "BBB",
+    "Mutagenicity": "Mutagenicidad",
+    "NOEC_num": "NOEC (mg/Kg)",
+}
+
+export = results[[c for c in export_cols if c in results.columns]].copy()
+export = export.rename(columns={c: export_cols[c] for c in export_cols if c in export.columns})
+export["Categoria"] = export["Categoria"].map(CAT_LABELS)
+export["Score (%)"] = export["Score (%)"].apply(lambda x: "{:.1f}".format(x))
+export["FQS (0-60)"] = export["FQS (0-60)"].apply(lambda x: "{:d}".format(int(x)))
+
+st.dataframe(export, use_container_width=True, hide_index=True)
+
+csv_bytes = export.to_csv(index=False).encode("utf-8")
+fname = "mycovery_{}_{}.csv".format(
+    cultivo,
+    "_".join(s[:5].replace("/","") for s in stressors)
+)
+st.download_button(
+    "Descargar tabla CSV",
+    csv_bytes,
+    fname,
+    "text/csv",
+    use_container_width=True,
+)
+
+st.markdown("---")
+st.markdown(
+    "_Mycovery v2.0 - Fungal metabolomics for next-gen bioinputs - "
+    "803 metabolitos - Atacama Desert - Chile - 2026_"
+)
+
+st.markdown(
+    '<div style="background:#0C2518;border-radius:10px;padding:18px 24px;margin-top:16px;text-align:center">' +
+    '<p style="color:#9FE1CB;font-size:0.82rem;margin:0 0 6px 0">' +
+    '&#169; 2026 <strong style="color:#1D9E75">Mycovery</strong>' +
+    ' &middot; Todos los derechos reservados</p>' +
+    '<p style="color:#6db89a;font-size:0.75rem;margin:0 0 4px 0">' +
+    'La base de datos de metabolitos fungicos, el algoritmo de puntuacion' +
+    ' multidimensional (FQS + SRS) y la metodologia de recomendacion de mezclas' +
+    ' son propiedad intelectual exclusiva de Mycovery.</p>' +
+    '<p style="color:#6db89a;font-size:0.75rem;margin:0">' +
+    'Queda prohibida la reproduccion, distribucion o uso comercial' +
+    ' sin autorizacion expresa y por escrito.' +
+    ' &middot; Atacama Desert &middot; Chile' +
+    ' &middot; <em>Nature encoded it. We decoded it.</em></p></div>',
+    unsafe_allow_html=True,
+)
