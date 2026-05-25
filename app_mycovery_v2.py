@@ -148,14 +148,17 @@ CSV_FILENAME = "mycovery_803_clean.csv"
 
 @st.cache_data
 def load_data() -> pd.DataFrame:
-    # 1. Intenta cargarlo desde la misma carpeta del repo (Streamlit Cloud lo tiene junto al .py)
     here = os.path.dirname(os.path.abspath(__file__))
-    local_path = os.path.join(here, CSV_FILENAME)
-    if os.path.isfile(local_path):
-        return pd.read_csv(local_path, sep=";")
-    # 2. Fallback: archivo en el directorio de trabajo
-    if os.path.isfile(CSV_FILENAME):
-        return pd.read_csv(CSV_FILENAME, sep=";")
+    candidates = [
+        os.path.join(here, CSV_FILENAME),
+        os.path.join(os.getcwd(), CSV_FILENAME),
+        CSV_FILENAME,
+        os.path.join("/mount/src/mycovery", CSV_FILENAME),
+        os.path.join("/mount/src/Mycovery", CSV_FILENAME),
+    ]
+    for path in candidates:
+        if os.path.isfile(path):
+            return pd.read_csv(path, sep=";")
     return None
 
 
