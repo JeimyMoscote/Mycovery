@@ -264,23 +264,19 @@ def render_card(rank: int, row: pd.Series, total: float) -> None:
     }
     for i, k in enumerate(fqs_keys):
         v = fqs_vals[i]
-        color = FQS_COLORS[i]
         icon = FQS_DIMS[k]["icon"]
         label = FQS_DIMS[k]["label"]
         raw = raw_vals[k]
-        expl = explanations[k]
-        bar_w = v * 10
         score_color = "#1D9E75" if v >= 8 else ("#BA7517" if v >= 5 else "#A32D2D")
         fqs_rows += (
             '<tr>'
-            '<td style="padding:3px 8px;font-size:0.78rem;white-space:nowrap">{} <strong>{}</strong></td>'
-            '<td style="padding:3px 8px;font-size:0.78rem;color:#555">{}</td>'
-            '<td style="padding:3px 8px;font-size:0.78rem;color:#333">{}</td>'
-            '<td style="padding:3px 8px;text-align:right">'
-            '<span style="background:{};color:white;padding:1px 7px;border-radius:10px;font-size:0.75rem;font-weight:700">{}/10</span>'
+            '<td style="padding:4px 10px;font-size:0.78rem;white-space:nowrap">{} <strong>{}</strong></td>'
+            '<td style="padding:4px 10px;font-size:0.78rem;color:#333">{}</td>'
+            '<td style="padding:4px 10px;text-align:right">'
+            '<span style="background:{};color:white;padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:700">{}/10</span>'
             '</td>'
             '</tr>'
-        ).format(icon, label, expl, raw, score_color, v)
+        ).format(icon, label, raw, score_color, v)
 
     # Badges
     bbb_badge = (
@@ -313,11 +309,10 @@ def render_card(rank: int, row: pd.Series, total: float) -> None:
         '<p style="margin:4px 0 3px 0;font-size:0.8rem"><strong>Perfil FQS — Aptitud de formulación (6 criterios):</strong></p>'
         '<div style="margin-bottom:6px">{segs}</div>'
         '<table style="width:100%;border-collapse:collapse;margin-top:4px">'
-        '<thead><tr>'
-        '<th style="text-align:left;font-size:0.72rem;color:#888;padding:2px 8px">Criterio</th>'
-        '<th style="text-align:left;font-size:0.72rem;color:#888;padding:2px 8px">Significado agronómico</th>'
-        '<th style="text-align:left;font-size:0.72rem;color:#888;padding:2px 8px">Valor medido</th>'
-        '<th style="text-align:right;font-size:0.72rem;color:#888;padding:2px 8px">Score</th>'
+        '<thead><tr style="border-bottom:1px solid #eee">'
+        '<th style="text-align:left;font-size:0.72rem;color:#888;padding:2px 10px">Criterio FQS</th>'
+        '<th style="text-align:left;font-size:0.72rem;color:#888;padding:2px 10px">Valor medido</th>'
+        '<th style="text-align:right;font-size:0.72rem;color:#888;padding:2px 10px">Score</th>'
         '</tr></thead>'
         '<tbody>{rows}</tbody>'
         '</table>'
@@ -610,32 +605,29 @@ st.markdown("---")
 st.markdown('<p class="section-title">Tabla para laboratorio / formulacion</p>',
             unsafe_allow_html=True)
 
-export_cols = {
-    "ID": "ID",
-    "Strain": "Cepa",
-    "Compound": "Metabolito",
-    "cat": "Categoria",
-    "score_total": "Score (%)",
-    "FQS": "FQS (0-60)",
-    "fqs_sol": "Solubilidad",
-    "fqs_gi": "Absorcion Foliar",
-    "fqs_bbb": "Seguridad Op.",
-    "fqs_pers": "Persistencia",
-    "fqs_noec": "Seg. Lombrices",
-    "fqs_cin": "Estab. Micro.",
-    "MW": "MW (Da)",
-    "LogP": "LogP",
-    "GI_abs": "GI Abs.",
-    "BBB": "BBB",
-    "Mutagenicity": "Mutagenicidad",
-    "NOEC_num": "NOEC (mg/Kg)",
-}
+base_cols = ["ID", "Strain", "Compound", "cat", "score_total", "FQS",
+             "Silicos_class", "GI_abs", "BBB", "BioTr_label", "NOEC_num",
+             "BioTr_count", "MW", "LogP", "Mutagenicity",
+             "fqs_sol", "fqs_gi", "fqs_bbb", "fqs_pers", "fqs_noec", "fqs_cin"]
+export = results[[c for c in base_cols if c in results.columns]].copy()
 
-export = results[[c for c in export_cols if c in results.columns]].copy()
-export = export.rename(columns={c: export_cols[c] for c in export_cols if c in export.columns})
+# Columnas renombradas para laboratorio
+export = export.rename(columns={
+    "Compound": "Metabolito", "cat": "Categoria", "score_total": "Score (%)",
+    "FQS": "FQS (0-60)", "Silicos_class": "Solubilidad (clase)",
+    "GI_abs": "Absorcion foliar", "BBB": "BBB permeant",
+    "BioTr_label": "Persistencia campo", "NOEC_num": "NOEC (mg/Kg)",
+    "BioTr_count": "Productos BioTr.", "Mutagenicity": "Mutagenicidad",
+    "fqs_sol": "Pts Solubilidad", "fqs_gi": "Pts Absorcion",
+    "fqs_bbb": "Pts Seguridad Op.", "fqs_pers": "Pts Persistencia",
+    "fqs_noec": "Pts Lombrices", "fqs_cin": "Pts Estab. Micro.",
+})
 export["Categoria"] = export["Categoria"].map(CAT_LABELS)
 export["Score (%)"] = export["Score (%)"].apply(lambda x: "{:.1f}".format(x))
 export["FQS (0-60)"] = export["FQS (0-60)"].apply(lambda x: "{:d}".format(int(x)))
+export["NOEC (mg/Kg)"] = export["NOEC (mg/Kg)"].apply(
+    lambda x: "{:,.0f}".format(x) if pd.notna(x) else "N/D"
+)
 
 st.dataframe(export, use_container_width=True, hide_index=True)
 
@@ -654,23 +646,23 @@ st.download_button(
 
 st.markdown("---")
 st.markdown(
-    "_Mycovery v2.0 - Fungal metabolomics for next-gen bioinputs - "
-    "803 metabolitos - Atacama Desert - Chile - 2026_"
+    "_Mycovery v2.0 · 803 metabolitos · Atacama Desert · Chile · 2026_"
 )
 
-st.markdown(
-    '<div style="background:#0C2518;border-radius:10px;padding:18px 24px;margin-top:16px;text-align:center">' +
-    '<p style="color:#9FE1CB;font-size:0.82rem;margin:0 0 6px 0">' +
-    '&#169; 2026 <strong style="color:#1D9E75">Mycovery</strong>' +
-    ' &middot; Todos los derechos reservados</p>' +
-    '<p style="color:#6db89a;font-size:0.75rem;margin:0 0 4px 0">' +
-    'La base de datos de metabolitos fungicos, el algoritmo de puntuacion' +
-    ' multidimensional (FQS + SRS) y la metodologia de recomendacion de mezclas' +
-    ' son propiedad intelectual exclusiva de Mycovery.</p>' +
-    '<p style="color:#6db89a;font-size:0.75rem;margin:0">' +
-    'Queda prohibida la reproduccion, distribucion o uso comercial' +
-    ' sin autorizacion expresa y por escrito.' +
-    ' &middot; Atacama Desert &middot; Chile' +
-    ' &middot; <em>Nature encoded it. We decoded it.</em></p></div>',
-    unsafe_allow_html=True,
+cr = (
+    "<div style='background:#0C2518;border-radius:10px;"
+    "padding:18px 24px;margin-top:16px;text-align:center'>"
+    "<p style='color:#9FE1CB;font-size:0.82rem;margin:0 0 6px 0'>"
+    "&#169; 2026 <strong style='color:#1D9E75'>Mycovery</strong>"
+    " &middot; Todos los derechos reservados</p>"
+    "<p style='color:#6db89a;font-size:0.75rem;margin:0 0 4px 0'>"
+    "La base de datos de metabolitos fungicos, el algoritmo de puntuacion"
+    " multidimensional (FQS + SRS) y la metodologia de recomendacion"
+    " son propiedad intelectual exclusiva de Mycovery.</p>"
+    "<p style='color:#6db89a;font-size:0.75rem;margin:0'>"
+    "Queda prohibida la reproduccion, distribucion o uso comercial"
+    " sin autorizacion expresa y por escrito."
+    " &middot; Atacama Desert &middot; Chile"
+    " &middot; <em>Nature encoded it. We decoded it.</em></p></div>"
 )
+st.markdown(cr, unsafe_allow_html=True)
